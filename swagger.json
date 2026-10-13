@@ -3,16 +3,14 @@
   "info": {
     "title": "Student Task Management System API",
     "version": "1.0.0",
-    "description": "REST API for managing student tasks and user authentication."
+    "description": "REST API for managing student tasks, user authentication, and dashboard statistics."
   },
-
   "servers": [
     {
       "url": "http://localhost:5000",
       "description": "Local development server"
     }
   ],
-
   "tags": [
     {
       "name": "Tasks",
@@ -21,16 +19,18 @@
     {
       "name": "Authentication",
       "description": "User registration and login endpoints"
+    },
+    {
+      "name": "Dashboard",
+      "description": "Task summary and progress statistics"
     }
   ],
-
   "paths": {
-
     "/api/tasks": {
       "get": {
         "tags": ["Tasks"],
-        "summary": "Get all tasks or filter tasks",
-        "description": "Returns all tasks. Optionally filter by status and/or priority using query parameters.",
+        "summary": "Get tasks",
+        "description": "Retrieve tasks with optional filtering, searching, sorting, and pagination.",
         "parameters": [
           {
             "name": "status",
@@ -51,6 +51,67 @@
               "enum": ["Low", "Medium", "High"]
             },
             "description": "Filter tasks by priority"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search task titles"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "description": "Number of tasks per page"
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "createdAt",
+              "enum": [
+                "title",
+                "status",
+                "priority",
+                "dueDate",
+                "createdAt",
+                "_id"
+              ]
+            },
+            "description": "Field used to sort tasks"
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["asc", "desc"],
+              "default": "desc"
+            },
+            "description": "Sort order"
           }
         ],
         "responses": {
@@ -59,10 +120,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Task"
-                  }
+                  "$ref": "#/components/schemas/TaskListResponse"
                 }
               }
             }
@@ -79,11 +137,10 @@
           }
         }
       },
-
       "post": {
         "tags": ["Tasks"],
         "summary": "Create a new task",
-        "description": "Creates a new task. Only title is required.",
+        "description": "Creates a task. The title is required.",
         "requestBody": {
           "required": true,
           "content": {
@@ -118,20 +175,13 @@
         }
       }
     },
-
     "/api/tasks/{id}": {
       "get": {
         "tags": ["Tasks"],
         "summary": "Get a task by ID",
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "MongoDB task ID"
+            "$ref": "#/components/parameters/TaskId"
           }
         ],
         "responses": {
@@ -167,20 +217,13 @@
           }
         }
       },
-
       "put": {
         "tags": ["Tasks"],
         "summary": "Update a task",
-        "description": "Updates an existing task. Send only the fields you want to change.",
+        "description": "Updates an existing task. Send the fields to be changed.",
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "MongoDB task ID"
+            "$ref": "#/components/parameters/TaskId"
           }
         ],
         "requestBody": {
@@ -226,19 +269,12 @@
           }
         }
       },
-
       "delete": {
         "tags": ["Tasks"],
         "summary": "Delete a task",
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "MongoDB task ID"
+            "$ref": "#/components/parameters/TaskId"
           }
         ],
         "responses": {
@@ -275,12 +311,11 @@
         }
       }
     },
-
     "/api/auth/register": {
       "post": {
         "tags": ["Authentication"],
         "summary": "Register a new student",
-        "description": "Creates a new student account. The password is securely hashed before storage.",
+        "description": "Creates a student account. The password is hashed before storage.",
         "requestBody": {
           "required": true,
           "content": {
@@ -303,7 +338,7 @@
             }
           },
           "400": {
-            "description": "User already exists or invalid data",
+            "description": "User already exists or input is invalid",
             "content": {
               "application/json": {
                 "schema": {
@@ -315,12 +350,11 @@
         }
       }
     },
-
     "/api/auth/register-many": {
       "post": {
         "tags": ["Authentication"],
         "summary": "Register multiple students",
-        "description": "Creates multiple student accounts using a JSON array.",
+        "description": "Creates multiple student accounts from a JSON array.",
         "requestBody": {
           "required": true,
           "content": {
@@ -336,7 +370,7 @@
         },
         "responses": {
           "201": {
-            "description": "Users registered successfully",
+            "description": "Registration results",
             "content": {
               "application/json": {
                 "schema": {
@@ -358,7 +392,6 @@
         }
       }
     },
-
     "/api/auth/login": {
       "post": {
         "tags": ["Authentication"],
@@ -397,12 +430,50 @@
           }
         }
       }
+    },
+    "/api/dashboard": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Get dashboard statistics",
+        "description": "Returns task counts grouped by status.",
+        "responses": {
+          "200": {
+            "description": "Dashboard statistics retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dashboard"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
-
   "components": {
+    "parameters": {
+      "TaskId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "MongoDB task ID"
+      }
+    },
     "schemas": {
-
       "TaskInput": {
         "type": "object",
         "required": ["title"],
@@ -434,7 +505,6 @@
           }
         }
       },
-
       "Task": {
         "type": "object",
         "properties": {
@@ -464,10 +534,40 @@
             "type": "string",
             "format": "date",
             "example": "2026-10-15"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
-
+      "TaskListResponse": {
+        "type": "object",
+        "properties": {
+          "totalTasks": {
+            "type": "integer",
+            "example": 25
+          },
+          "currentPage": {
+            "type": "integer",
+            "example": 1
+          },
+          "totalPages": {
+            "type": "integer",
+            "example": 3
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          }
+        }
+      },
       "RegisterInput": {
         "type": "object",
         "required": ["name", "email", "password"],
@@ -488,7 +588,6 @@
           }
         }
       },
-
       "LoginInput": {
         "type": "object",
         "required": ["email", "password"],
@@ -505,7 +604,6 @@
           }
         }
       },
-
       "RegisterResponse": {
         "type": "object",
         "properties": {
@@ -518,23 +616,23 @@
           }
         }
       },
-
       "RegisterManyResponse": {
         "type": "object",
         "properties": {
           "message": {
             "type": "string",
-            "example": "Users registered successfully"
+            "example": "Users processed successfully"
           },
-          "users": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/User"
-            }
+          "created": {
+            "type": "integer",
+            "example": 3
+          },
+          "skipped": {
+            "type": "integer",
+            "example": 1
           }
         }
       },
-
       "LoginResponse": {
         "type": "object",
         "properties": {
@@ -544,20 +642,18 @@
           },
           "token": {
             "type": "string",
-            "example": "JWT_TOKEN"
+            "description": "JWT authentication token"
           },
           "user": {
             "$ref": "#/components/schemas/User"
           }
         }
       },
-
       "User": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "652f1a2b3c4d5e6f7a8b9c0d"
+          "_id": {
+            "type": "string"
           },
           "name": {
             "type": "string",
@@ -565,35 +661,51 @@
           },
           "email": {
             "type": "string",
+            "format": "email",
             "example": "teststudent@gmail.com"
           },
           "role": {
             "type": "string",
-            "enum": ["student", "admin"],
             "example": "student"
           }
         }
       },
-
       "DeleteResponse": {
         "type": "object",
         "properties": {
           "message": {
             "type": "string",
             "example": "Task deleted successfully"
-          },
-          "task": {
-            "$ref": "#/components/schemas/Task"
           }
         }
       },
-
+      "Dashboard": {
+        "type": "object",
+        "properties": {
+          "totalTasks": {
+            "type": "integer",
+            "example": 20
+          },
+          "pendingTasks": {
+            "type": "integer",
+            "example": 8
+          },
+          "inProgressTasks": {
+            "type": "integer",
+            "example": 5
+          },
+          "completedTasks": {
+            "type": "integer",
+            "example": 7
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "properties": {
           "message": {
             "type": "string",
-            "example": "Task not found"
+            "example": "An error occurred"
           }
         }
       }

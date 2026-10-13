@@ -20,28 +20,62 @@ router.post("/", async (req, res) => {
 
 
 // GET - Get All Tasks
-// GET - Get Tasks with Query Parameters
+
+ // GET - Get Tasks with Search, Filtering, Sorting and Pagination
 router.get("/", async (req, res) => {
     try {
         const filter = {};
 
+        // Filter by status
         if (req.query.status) {
             filter.status = req.query.status;
         }
 
+        // Filter by priority
         if (req.query.priority) {
             filter.priority = req.query.priority;
         }
 
-        const tasks = await Task.find(filter);
+        // Search by task title
+        if (req.query.search) {
+            filter.title = {
+                $regex: req.query.search,
+                $options: "i"
+            };
+        }
 
-        res.status(200).json(tasks);
+        // Sorting
+        const sortBy = req.query.sortBy || "createdAt";
+        const order = req.query.order === "asc" ? 1 : -1;
+
+        // Pagination
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(
+            100,
+            Math.max(1, parseInt(req.query.limit, 10) || 10)
+        );
+        const skip = (page - 1) * limit;
+
+        const totalTasks = await Task.countDocuments(filter);
+
+        const tasks = await Task.find(filter)
+            .sort({ [sortBy]: order })
+            .skip(skip)
+            .limit(limit);
+
+        res.status(200).json({
+            totalTasks,
+            currentPage: page,
+            totalPages: Math.ceil(totalTasks / limit),
+            tasks
+        });
     } catch (error) {
         res.status(500).json({
             message: error.message
         });
     }
 });
+
 
 
 // GET - Get Task by ID

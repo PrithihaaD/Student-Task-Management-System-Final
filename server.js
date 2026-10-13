@@ -5,6 +5,7 @@ require("dotenv").config();
 
 const taskRoutes = require("./routes/taskRoutes");
 const authRoutes = require("./routes/authRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 const swaggerSpec = require("./swagger.json");
 
 const app = express();
@@ -31,6 +32,7 @@ app.get("/swagger.json", (req, res) => {
 // API routes
 app.use("/api/tasks", taskRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.get("/api/auth/test", (req, res) => {
     res.send("Auth route is working");
 });

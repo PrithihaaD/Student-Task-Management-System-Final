@@ -22,9 +22,8 @@ const taskSchema = new mongoose.Schema({
         default: "Medium"
     },
 
-    dueDate: {
-        type: Date
-    }
+     dueDate: { type: Date }
+}, { timestamps: true
 });
 
 module.exports = mongoose.model("Task", taskSchema);

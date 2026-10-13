@@ -1,0 +1,106 @@
+const ApiError = require("../utils/ApiError");
+
+// Runs when no route matched -> 404
+const notFound = (req, res, next) => {
+    next(
+        new ApiError(404, `Route not found: ${req.method} ${req.originalUrl}`)
+    );
+};
+
+// Central handler for EVERY error in the app.
+// The 4-argument signature is how Express recognizes error middleware.
+const errorHandler = (error, req, res, next) => {
+    // If a response is already on its way, we cannot send another one.
+    if (res.headersSent) {
+        return next(error);
+    }
+
+    let statusCode = error.statusCode || 500;
+    let message = error.message || "Internal server error";
+    let details = error.details || null;
+
+    // Mongoose validation error (required fields, enum mismatch, etc.)
+    if (error.name === "ValidationError") {
+        statusCode = 400;
+        message = "Validation failed";
+        details = Object.values(error.errors).map((err) => ({
+            field: err.path,
+            message: err.message
+        }));
+    }
+
+    // Invalid MongoDB ObjectId (e.g. /api/tasks/not-an-id)
+    if (error.name === "CastError") {
+        statusCode = 400;
+        message = `Invalid value for ${error.path}`;
+        details = null;
+    }
+
+    // Duplicate key (e.g. registering an email that already exists)
+    if (error.code === 11000) {
+        statusCode = 409;
+        const field = Object.keys(error.keyValue || {})[0] || "field";
+        message = `Duplicate value for ${field}`;
+        details = null;
+    }
+
+    // JWT safety net (in case a route forgets to handle it)
+    if (error.name === "JsonWebTokenError") {
+        statusCode = 401;
+        message = "Invalid token";
+        details = null;
+    }
+
+    if (error.name === "TokenExpiredError") {
+        statusCode = 401;
+        message = "Token expired";
+        details = null;
+    }
+
+    // For ANY server error (500+), never expose internals to the client.
+    if (statusCode >= 500) {
+        message = "Internal server error";
+        details = null;
+    }
+
+    // ---- Server-side logging (never sent to the client) ----
+    // Rules:
+    //  - 4xx: our own curated, non-sensitive message.
+    //  - 5xx: status + error TYPE + HTTP method + route path only.
+    //    No error.message (a driver message can contain the DB connection
+    //    string/host) and no stack trace in normal mode.
+    //  - Full stack only when ERROR_DEBUG === "true" (local development only,
+    //    never enabled automatically).
+    //  - Never logs request bodies, headers, cookies, tokens, or query params.
+    if (process.env.NODE_ENV !== "test") {
+        const method = req.method || "-";
+        // Route path only - deliberately excludes the query string.
+        const routePath =
+            req.route && req.route.path
+                ? `${req.baseUrl || ""}${req.route.path}`
+                : req.path || "-";
+
+        if (statusCode >= 500) {
+            const errorType = error.name || "Error";
+            console.error(
+                `[ERROR] ${statusCode} - ${errorType} - ${method} ${routePath}`
+            );
+            if (process.env.ERROR_DEBUG === "true" && error.stack) {
+                console.error(error.stack);
+            }
+        } else {
+            console.error(
+                `[ERROR] ${statusCode} - ${message} - ${method} ${routePath}`
+            );
+        }
+    }
+
+    const response = { message };
+    if (details) {
+        response.details = details;
+    }
+
+    res.status(statusCode).json(response);
+};
+
+module.exports = { notFound, errorHandler };
